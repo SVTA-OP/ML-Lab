@@ -90,7 +90,7 @@ plt.savefig('./images/combined_eda.eps', format='eps')
 plt.show()
 
 pair = sns.pairplot(df.drop('Id', axis=1), hue='Species')
-pair.savefig('./images/pairplot.eps', format='eps')
+pair.savefig('./images/pairplot.eps', format='eps', dpi=600)
 plt.show()
 
 
