@@ -1,3 +1,4 @@
+
 import os
 import pandas as pd
 import numpy as np
@@ -42,49 +43,60 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
     numeric_cols = list(df.select_dtypes(include="number").columns)
  
     # ---- Step 3: find the target column ----
-    # if the caller passed target_col explicitly, use that and skip auto-detection
-    target_keywords = ["target", "label", "class", "status", "outcome", "species", "diagnosis"]
+    target_keywords = ["target", "label", "class", "status", "outcome", "species", "diagnosis",
+                        "amount", "price", "salary", "income", "score"]
  
     if target_col is None:
-        # collect all low-cardinality non-numeric candidates first
         candidates = []
         for c in df.columns:
             if c not in numeric_cols:
                 if df[c].nunique() <= 20:
                     candidates.append(c)
  
-        # prefer a candidate whose name matches a common "target" keyword
         for c in candidates:
             if any(word in c.lower() for word in target_keywords):
                 target_col = c
                 break
  
-        # otherwise fall back to the LAST low-cardinality candidate
-        # (target columns are conventionally placed last in a dataset,
-        # unlike other categorical feature columns which tend to come first)
         if target_col is None and len(candidates) > 0:
             target_col = candidates[-1]
  
-        # if still nothing, look for a numeric column with few unique values (like Outcome = 0/1)
+        if target_col is None:
+            for c in numeric_cols:
+                if any(word in c.lower() for word in target_keywords):
+                    target_col = c
+                    break
+ 
         if target_col is None:
             for c in numeric_cols:
                 if df[c].nunique() <= 10:
                     target_col = c
                     break
  
-    # if the target turned out to be numeric, remove it from the numeric feature list
     if target_col in numeric_cols:
         numeric_cols.remove(target_col)
  
     has_target = target_col is not None
+ 
+    # ---- Step 4: decide if this is a classification or regression problem ----
+    problem_type = None
+    if has_target:
+        if df[target_col].dtype == object or str(df[target_col].dtype) == "category":
+            problem_type = "classification"
+        elif df[target_col].nunique() <= 20:
+            problem_type = "classification"
+        else:
+            problem_type = "regression"
+ 
     print("Detected target column:", target_col)
+    print("Detected problem type:", problem_type)
     print("Numeric feature columns:", numeric_cols)
  
     if len(numeric_cols) == 0:
         print("No numeric columns found. Stopping here.")
         return df
  
-    # ---- Step 4: set up font ----
+    # ---- Step 5: set up font ----
     if os.path.exists(font_path):
         font_manager.fontManager.addfont(font_path)
         prop = font_manager.FontProperties(fname=font_path)
@@ -95,7 +107,7 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
  
     os.makedirs(output_dir, exist_ok=True)
  
-    # ---- Step 5: limit number of columns plotted per row so wide datasets stay readable ----
+    # ---- Step 6: limit number of columns plotted per row so wide datasets stay readable ----
     max_cols = 6
     if len(numeric_cols) > max_cols:
         print("Too many numeric columns (", len(numeric_cols), "), plotting only the first", max_cols)
@@ -105,109 +117,96 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
  
     n_cols = len(cols)
  
-    # ---- Step 6: build the grid of plots ----
-    fig = plt.figure(figsize=(6 * n_cols, 30))
-    gs = fig.add_gridspec(6, n_cols)
+    # =========================================================
+    # CLASSIFICATION: histogram, boxplot, correlation heatmap
+    # =========================================================
+    if problem_type == "classification" or not has_target:
  
-    # Row 0: histograms
-    for i in range(n_cols):
-        col = cols[i]
-        ax = fig.add_subplot(gs[0, i])
-        sns.histplot(df[col], kde=True, ax=ax)
-        ax.set_title(col, fontweight="bold")
-        ax.set_xlabel(col, fontweight="bold")
-        ax.set_ylabel("Count", fontweight="bold")
+        n_rows = 3
+        fig = plt.figure(figsize=(6 * n_cols, 15))
+        gs = fig.add_gridspec(n_rows, n_cols)
  
-    # Row 1: boxplots
-    if has_target:
+        # Row 0: histograms
+        for i in range(n_cols):
+            col = cols[i]
+            ax = fig.add_subplot(gs[0, i])
+            sns.histplot(df[col], kde=True, ax=ax)
+            ax.set_title(col, fontweight="bold")
+            ax.set_xlabel(col, fontweight="bold")
+            ax.set_ylabel("Count", fontweight="bold")
+ 
+        # Row 1: boxplots (against target if we have one, else plain boxplot)
         for i in range(n_cols):
             col = cols[i]
             ax = fig.add_subplot(gs[1, i])
-            sns.boxplot(x=target_col, y=col, data=df, ax=ax)
+            if has_target:
+                sns.boxplot(x=target_col, y=col, data=df, ax=ax)
+                ax.set_xlabel(target_col, fontweight="bold")
+            else:
+                sns.boxplot(y=df[col], ax=ax)
+                ax.set_xlabel("", fontweight="bold")
             ax.set_title(col, fontweight="bold")
-            ax.set_xlabel(target_col, fontweight="bold")
             ax.set_ylabel(col, fontweight="bold")
  
-    # Row 2: violin plots
-    if has_target:
-        for i in range(n_cols):
-            col = cols[i]
-            ax = fig.add_subplot(gs[2, i])
-            sns.violinplot(x=target_col, y=col, data=df, ax=ax)
-            ax.set_title(col, fontweight="bold")
-            ax.set_xlabel(target_col, fontweight="bold")
-            ax.set_ylabel(col, fontweight="bold")
+        # Row 2: one big correlation heatmap spanning the whole row
+        ax_heat = fig.add_subplot(gs[2, :])
+        sns.heatmap(df[numeric_cols].corr(), annot=True, cmap="coolwarm", ax=ax_heat)
+        ax_heat.set_title("Correlation Heatmap", fontweight="bold")
  
-    # Row 3: swarm plots
-    if has_target:
-        for i in range(n_cols):
-            col = cols[i]
-            ax = fig.add_subplot(gs[3, i])
-            sns.swarmplot(x=target_col, y=col, data=df, ax=ax)
-            ax.set_title(col, fontweight="bold")
-            ax.set_xlabel(target_col, fontweight="bold")
-            ax.set_ylabel(col, fontweight="bold")
- 
-    # Row 4: two scatter plots using the first four numeric columns available
-    if n_cols >= 2:
-        x1, y1 = cols[0], cols[1]
-        ax_scatter1 = fig.add_subplot(gs[4, 0:2])
-        if has_target:
-            sns.scatterplot(x=x1, y=y1, hue=target_col, data=df, ax=ax_scatter1)
-        else:
-            sns.scatterplot(x=x1, y=y1, data=df, ax=ax_scatter1)
-        ax_scatter1.set_title(x1 + " vs " + y1, fontweight="bold")
-        ax_scatter1.set_xlabel(x1, fontweight="bold")
-        ax_scatter1.set_ylabel(y1, fontweight="bold")
- 
-    if n_cols >= 4:
-        x2, y2 = cols[2], cols[3]
-        ax_scatter2 = fig.add_subplot(gs[4, 2:4])
-        if has_target:
-            sns.scatterplot(x=x2, y=y2, hue=target_col, data=df, ax=ax_scatter2)
-        else:
-            sns.scatterplot(x=x2, y=y2, data=df, ax=ax_scatter2)
-        ax_scatter2.set_title(x2 + " vs " + y2, fontweight="bold")
-        ax_scatter2.set_xlabel(x2, fontweight="bold")
-        ax_scatter2.set_ylabel(y2, fontweight="bold")
- 
-    # Row 5: correlation heatmap and target countplot
-    half = n_cols // 2
-    if half < 1:
-        half = 1
- 
-    ax_heat = fig.add_subplot(gs[5, 0:half])
-    sns.heatmap(df[numeric_cols].corr(), annot=True, cmap="coolwarm", ax=ax_heat)
-    ax_heat.set_title("Correlation Heatmap", fontweight="bold")
- 
-    if has_target and half < n_cols:
-        ax_count = fig.add_subplot(gs[5, half:n_cols])
-        sns.countplot(x=target_col, data=df, ax=ax_count)
-        ax_count.set_title(target_col + " Count", fontweight="bold")
-        ax_count.set_xlabel(target_col, fontweight="bold")
-        ax_count.set_ylabel("Count", fontweight="bold")
- 
-    plt.tight_layout()
-    combined_path = output_dir + "/" + dataset_name + "_combined_eda.eps"
-    plt.savefig(combined_path, format="eps", dpi=600)
-    plt.show()
-    plt.close(fig)
- 
-    # ---- Step 7: pairplot (only if not too many columns) ----
-    if len(numeric_cols) <= 8:
-        if has_target:
-            plot_df = df[numeric_cols + [target_col]]
-            pair = sns.pairplot(plot_df, hue=target_col)
-        else:
-            plot_df = df[numeric_cols]
-            pair = sns.pairplot(plot_df)
-        pair_path = output_dir + "/" + dataset_name + "_pairplot.eps"
-        pair.savefig(pair_path, format="eps", dpi=600)
+        plt.tight_layout()
+        combined_path = output_dir + "/" + dataset_name + "_classification_eda.eps"
+        plt.savefig(combined_path, format="eps", dpi=600)
         plt.show()
-    else:
-        print("Skipping pairplot, too many numeric columns:", len(numeric_cols))
+        plt.close(fig)
  
-    # ---- Step 8: descriptive statistics for each numeric column ----
+    # =========================================================
+    # REGRESSION: histogram, correlation heatmap, scatter vs target
+    # =========================================================
+    if problem_type == "regression":
+ 
+        n_rows = 3
+        fig = plt.figure(figsize=(6 * n_cols, 15))
+        gs = fig.add_gridspec(n_rows, n_cols)
+ 
+        # Row 0: histograms of features
+        for i in range(n_cols):
+            col = cols[i]
+            ax = fig.add_subplot(gs[0, i])
+            sns.histplot(df[col], kde=True, ax=ax)
+            ax.set_title(col, fontweight="bold")
+            ax.set_xlabel(col, fontweight="bold")
+            ax.set_ylabel("Count", fontweight="bold")
+ 
+        # Row 1: scatter plot of each feature against the target
+        for i in range(n_cols):
+            col = cols[i]
+            ax = fig.add_subplot(gs[1, i])
+            sns.scatterplot(x=col, y=target_col, data=df, ax=ax)
+            ax.set_title(col + " vs " + target_col, fontweight="bold")
+            ax.set_xlabel(col, fontweight="bold")
+            ax.set_ylabel(target_col, fontweight="bold")
+ 
+        # Row 2: histogram of the target itself + correlation heatmap
+        ax_target_hist = fig.add_subplot(gs[2, 0:max(n_cols // 2, 1)])
+        sns.histplot(df[target_col], kde=True, ax=ax_target_hist)
+        ax_target_hist.set_title(target_col + " Distribution", fontweight="bold")
+        ax_target_hist.set_xlabel(target_col, fontweight="bold")
+        ax_target_hist.set_ylabel("Count", fontweight="bold")
+ 
+        half = max(n_cols // 2, 1)
+        if half < n_cols:
+            ax_heat = fig.add_subplot(gs[2, half:n_cols])
+            corr_cols = numeric_cols + [target_col]
+            sns.heatmap(df[corr_cols].corr(), annot=True, cmap="coolwarm", ax=ax_heat)
+            ax_heat.set_title("Correlation Heatmap", fontweight="bold")
+ 
+        plt.tight_layout()
+        combined_path = output_dir + "/" + dataset_name + "_regression_eda.eps"
+        plt.savefig(combined_path, format="eps", dpi=600)
+        plt.show()
+        plt.close(fig)
+ 
+    # ---- Step 7: descriptive statistics for each numeric column ----
     for col in numeric_cols:
         print("=" * 50)
         print(col)
@@ -224,7 +223,7 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
         print()
  
     return df
- 
+
 
 
 df1 = pd.read_csv("Iris.csv")
