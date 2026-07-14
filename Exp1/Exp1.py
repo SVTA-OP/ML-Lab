@@ -9,7 +9,7 @@ from matplotlib import font_manager
  
 def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./times.ttf", target_col=None):
  
-    # ---- Step 0: clean up column names (some CSVs have stray leading/trailing spaces) ----
+    
     df = df.rename(columns=lambda c: c.strip())
     if target_col is not None:
         target_col = target_col.strip()
@@ -24,11 +24,11 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
     print("Missing Values:")
     print(df.isnull().sum())
     print()
-    print("Summary Statistics:")
+    print("Summary Statistics:")    
     print(df.describe())
     print("=" * 60)
  
-    # ---- Step 1: find an id column and drop it ----
+    
     id_col = None
     for c in df.columns:
         if c.lower() in ("id", "index", "unnamed: 0"):
@@ -39,10 +39,13 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
         df = df.drop(columns=[id_col])
         print("Dropped id column:", id_col)
  
-    # ---- Step 2: find numeric columns ----
+    
     numeric_cols = list(df.select_dtypes(include="number").columns)
+    for col in numeric_cols:
+        if df[col].isnull().any():
+            df[col] = df[col].fillna(df[col].median())
  
-    # ---- Step 3: find the target column ----
+    
     target_keywords = ["target", "label", "class", "status", "outcome", "species", "diagnosis",
                         "amount", "price", "salary", "income", "score"]
  
@@ -78,7 +81,7 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
  
     has_target = target_col is not None
  
-    # ---- Step 4: decide if this is a classification or regression problem ----
+    
     problem_type = None
     if has_target:
         if df[target_col].dtype == object or str(df[target_col].dtype) == "category":
@@ -96,7 +99,7 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
         print("No numeric columns found. Stopping here.")
         return df
  
-    # ---- Step 5: set up font ----
+    
     if os.path.exists(font_path):
         font_manager.fontManager.addfont(font_path)
         prop = font_manager.FontProperties(fname=font_path)
@@ -107,7 +110,7 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
  
     os.makedirs(output_dir, exist_ok=True)
  
-    # ---- Step 6: limit number of columns plotted per row so wide datasets stay readable ----
+    
     max_cols = 6
     if len(numeric_cols) > max_cols:
         print("Too many numeric columns (", len(numeric_cols), "), plotting only the first", max_cols)
@@ -117,16 +120,16 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
  
     n_cols = len(cols)
  
-    # =========================================================
-    # CLASSIFICATION: histogram, boxplot, correlation heatmap
-    # =========================================================
+    
+    
+    
     if problem_type == "classification" or not has_target:
  
         n_rows = 3
         fig = plt.figure(figsize=(6 * n_cols, 15))
         gs = fig.add_gridspec(n_rows, n_cols)
  
-        # Row 0: histograms
+        
         for i in range(n_cols):
             col = cols[i]
             ax = fig.add_subplot(gs[0, i])
@@ -135,7 +138,7 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
             ax.set_xlabel(col, fontweight="bold")
             ax.set_ylabel("Count", fontweight="bold")
  
-        # Row 1: boxplots (against target if we have one, else plain boxplot)
+        
         for i in range(n_cols):
             col = cols[i]
             ax = fig.add_subplot(gs[1, i])
@@ -148,7 +151,7 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
             ax.set_title(col, fontweight="bold")
             ax.set_ylabel(col, fontweight="bold")
  
-        # Row 2: one big correlation heatmap spanning the whole row
+        
         ax_heat = fig.add_subplot(gs[2, :])
         sns.heatmap(df[numeric_cols].corr(), annot=True, cmap="coolwarm", ax=ax_heat)
         ax_heat.set_title("Correlation Heatmap", fontweight="bold")
@@ -159,16 +162,16 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
         plt.show()
         plt.close(fig)
  
-    # =========================================================
-    # REGRESSION: histogram, correlation heatmap, scatter vs target
-    # =========================================================
+    
+    
+    
     if problem_type == "regression":
  
         n_rows = 3
         fig = plt.figure(figsize=(6 * n_cols, 15))
         gs = fig.add_gridspec(n_rows, n_cols)
  
-        # Row 0: histograms of features
+        
         for i in range(n_cols):
             col = cols[i]
             ax = fig.add_subplot(gs[0, i])
@@ -177,7 +180,7 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
             ax.set_xlabel(col, fontweight="bold")
             ax.set_ylabel("Count", fontweight="bold")
  
-        # Row 1: scatter plot of each feature against the target
+        
         for i in range(n_cols):
             col = cols[i]
             ax = fig.add_subplot(gs[1, i])
@@ -186,7 +189,7 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
             ax.set_xlabel(col, fontweight="bold")
             ax.set_ylabel(target_col, fontweight="bold")
  
-        # Row 2: histogram of the target itself + correlation heatmap
+        
         ax_target_hist = fig.add_subplot(gs[2, 0:max(n_cols // 2, 1)])
         sns.histplot(df[target_col], kde=True, ax=ax_target_hist)
         ax_target_hist.set_title(target_col + " Distribution", fontweight="bold")
@@ -206,7 +209,7 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
         plt.show()
         plt.close(fig)
  
-    # ---- Step 7: descriptive statistics for each numeric column ----
+    
     for col in numeric_cols:
         print("=" * 50)
         print(col)
@@ -224,10 +227,13 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
  
     return df
 
+print("Perform EDA imported")
 
 
-df1 = pd.read_csv("Iris.csv")
-perform_eda(df1, dataset_name="iris")
-#
-df2 = pd.read_csv("loan_approval_dataset.csv")
-perform_eda(df2, dataset_name="loan")
+if __name__ == "__main__":
+
+    df1 = pd.read_csv("Iris.csv")
+    perform_eda(df1, dataset_name="iris")
+
+    df2 = pd.read_csv("loan_approval_dataset.csv")
+    perform_eda(df2, dataset_name="loan")
