@@ -1,1 +1,4 @@
 .venv
+*.eps
+__pycache__/
+*.pyc
