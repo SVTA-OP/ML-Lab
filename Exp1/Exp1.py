@@ -10,7 +10,7 @@ from matplotlib import font_manager
 def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./times.ttf", target_col=None):
  
     
-    df = df.rename(columns=lambda c: c.strip())
+    df = df.rename(columns=lambda c: str(c).strip())
     if target_col is not None:
         target_col = target_col.strip()
  
@@ -157,8 +157,8 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
         ax_heat.set_title("Correlation Heatmap", fontweight="bold")
  
         plt.tight_layout()
-        combined_path = output_dir + "/" + dataset_name + "_classification_eda.eps"
-        plt.savefig(combined_path, format="eps", dpi=600)
+        combined_path = output_dir + "/" + dataset_name + "_classification_eda.pdf"
+        plt.savefig(combined_path, format="pdf", dpi=600)
         plt.show()
         plt.close(fig)
  
@@ -204,8 +204,8 @@ def perform_eda(df, dataset_name="dataset", output_dir="./images", font_path="./
             ax_heat.set_title("Correlation Heatmap", fontweight="bold")
  
         plt.tight_layout()
-        combined_path = output_dir + "/" + dataset_name + "_regression_eda.eps"
-        plt.savefig(combined_path, format="eps", dpi=600)
+        combined_path = output_dir + "/" + dataset_name + "_regression_eda.pdf"
+        plt.savefig(combined_path, format="pdf", dpi=600)
         plt.show()
         plt.close(fig)
  
